@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Life Graph AI — Student Knowledge & Career Assistant</title>
+    
+    <!-- Premium Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom Style Sheet -->
+    <link rel="stylesheet" href="app.css">
+    
+    <!-- Main Frontend Script -->
+    <script src="app.js" defer></script>
+</head>
+<body>
+    <!-- 1. AUTHENTICATION CONTAINER (Sign In / Sign Up) -->
+    <div class="auth-container" id="auth-container">
+        <div class="auth-card">
+            <div class="auth-brand">
+                <div class="brand-logo" style="margin: 0 auto 16px;">
+                    <i class="fa-solid fa-brain"></i>
+                </div>
+                <h2>Life Graph AI</h2>
+                <p>Personal Student RAG Knowledge & Career Assistant</p>
+            </div>
+            
+            <div class="auth-tabs">
+                <button class="auth-tab active" id="tab-login">Sign In</button>
+                <button class="auth-tab" id="tab-register">Sign Up</button>
+            </div>
+            
+            <!-- Login Form -->
+            <form id="login-form" class="auth-form">
+                <div class="form-group">
+                    <label for="login-username"><i class="fa-solid fa-user"></i> Username</label>
+                    <input type="text" id="login-username" required placeholder="Enter username (e.g. buddy)">
+                </div>
+                <div class="form-group">
+                    <label for="login-password"><i class="fa-solid fa-key"></i> Password</label>
+                    <input type="password" id="login-password" required placeholder="Enter password">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 8px;">Sign In <i class="fa-solid fa-right-to-bracket"></i></button>
+            </form>
+            
+            <!-- Register Form -->
+            <form id="register-form" class="auth-form" style="display: none;">
+                <div class="form-group">
+                    <label for="reg-fullname"><i class="fa-solid fa-signature"></i> Full Name</label>
+                    <input type="text" id="reg-fullname" required placeholder="e.g. Buddy Student">
+                </div>
+                <div class="form-group">
+                    <label for="reg-username"><i class="fa-solid fa-user"></i> Username</label>
+                    <input type="text" id="reg-username" required placeholder="e.g. buddy">
+                </div>
+                <div class="form-group">
+                    <label for="reg-password"><i class="fa-solid fa-key"></i> Password</label>
+                    <input type="password" id="reg-password" required placeholder="Create password">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 8px;">Register Account <i class="fa-solid fa-user-plus"></i></button>
+            </form>
+            
+            <div class="auth-alert" id="auth-alert" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- 2. MAIN APPLICATION WORKSPACE (Hidden until authenticated) -->
+    <div class="app-container" id="app-container" style="display: none;">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="brand-logo">
+                    <i class="fa-solid fa-brain"></i>
+                </div>
+                <div class="brand-text">
+                    <h1>Life Graph AI</h1>
+                    <span id="sidebar-user-tag">Student Assistant</span>
+                </div>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <ul>
+                    <li class="nav-item active" data-view="dashboard">
+                        <a href="#"><i class="fa-solid fa-chart-pie"></i><span>Dashboard</span></a>
+                    </li>
+                    <li class="nav-item" data-view="knowledge">
+                        <a href="#"><i class="fa-solid fa-folder-open"></i><span>Knowledge Vault</span></a>
+                    </li>
+                    <li class="nav-item" data-view="chat">
+                        <a href="#"><i class="fa-solid fa-comments"></i><span>AI Study Chat</span></a>
+                    </li>
+                    <li class="nav-item" data-view="career">
+                        <a href="#"><i class="fa-solid fa-briefcase"></i><span>Career & Jobs</span></a>
+                    </li>
+                    <li class="nav-item" data-view="settings">
+                        <a href="#"><i class="fa-solid fa-sliders"></i><span>Settings</span></a>
+                    </li>
+                </ul>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="api-status-badge">
+                    <span class="status-dot connected"></span>
+                    <span class="status-text">Server Connected</span>
+                </div>
+                <div class="api-key-badge warning" id="api-key-warning" style="margin-top: 8px;">
+                    <i class="fa-solid fa-circle-exclamation"></i>
+                    <span>No API Key Entered</span>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="logout-btn" style="margin-top: 12px; width: 100%;"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Header bar -->
+            <header class="main-header">
+                <div class="header-search">
+                    <div class="search-box-wrapper">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" id="global-search-input" placeholder="Search inside your knowledge base (concepts, files, notes)...">
+                        <button class="search-clear-btn" id="search-clear-btn" style="display: none;"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                </div>
+                
+                <div class="header-profile">
+                    <div class="profile-role" id="current-role-badge">Target: Frontend Developer</div>
+                    <div class="notification-icon">
+                        <i class="fa-regular fa-bell"></i>
+                    </div>
+                    <div class="avatar-wrapper" onclick="document.querySelector('[data-view=settings]').click()">
+                        <div class="avatar-letter" id="profile-avatar-letter">S</div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Search Results Slide Panel -->
+            <section class="search-results-panel" id="search-results-panel" style="display: none;">
+                <div class="panel-header">
+                    <h2><i class="fa-solid fa-magnifying-glass-chart"></i> Search Results for "<span id="search-query-display">...</span>"</h2>
+                    <button class="close-panel-btn" id="close-search-panel-btn"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="panel-body">
+                    <div class="search-meta" id="search-meta-text">Found 0 matching document sections</div>
+                    <div class="search-results-list" id="search-results-list">
+                        <!-- Search matches go here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- VIEW: DASHBOARD -->
+            <div class="view-section active-view" id="view-dashboard">
+                <div class="view-title-container">
+                    <h2 class="view-title" id="dashboard-welcome-title">Welcome, buddy! 👋</h2>
+                    <p class="view-subtitle">Access your knowledge storage, RAG study chat, skill graphs, and career recommendation matrix.</p>
+                </div>
+
+                <!-- Stats Summary -->
+                <div class="stats-grid">
+                    <div class="stat-card card-gradient-purple" onclick="document.querySelector('[data-view=knowledge]').click()">
+                        <div class="stat-icon"><i class="fa-solid fa-file-pdf"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="stat-docs-count">0</span>
+                            <span class="stat-label">Knowledge Documents</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card card-gradient-blue" onclick="document.querySelector('[data-view=chat]').click()">
+                        <div class="stat-icon"><i class="fa-solid fa-message"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="stat-queries-count">0</span>
+                            <span class="stat-label">AI Chat Queries</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card card-gradient-cyan" onclick="document.querySelector('[data-view=career]').click()">
+                        <div class="stat-icon"><i class="fa-solid fa-circle-nodes"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="stat-skills-count">5</span>
+                            <span class="stat-label">Skills Extracted</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card card-gradient-indigo" onclick="document.querySelector('[data-view=career]').click()">
+                        <div class="stat-icon"><i class="fa-solid fa-rocket"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="stat-jobs-count">0</span>
+                            <span class="stat-label">Job Match Suggestions</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Middle Content Rows -->
+                <div class="dashboard-grid">
+                    <!-- Left: Skill Graph -->
+                    <div class="dashboard-panel panel-skills">
+                        <div class="panel-head">
+                            <h3><i class="fa-solid fa-chart-simple"></i> My Skills</h3>
+                            <button class="panel-action-btn" onclick="document.querySelector('[data-view=career]').click()">Analyze Graph</button>
+                        </div>
+                        <div class="panel-body flex-column">
+                            <div class="skill-graph-subtitle">Detected from your resume, certificates, and learning activity.</div>
+                            <div class="skills-visual-container" id="dashboard-skills-list">
+                                <!-- Dynamic progress bars loaded here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Recent Files -->
+                    <div class="dashboard-panel panel-documents">
+                        <div class="panel-head">
+                            <h3><i class="fa-solid fa-folder-open"></i> Recent Documents</h3>
+                            <button class="panel-action-btn" onclick="document.querySelector('[data-view=knowledge]').click()">View All</button>
+                        </div>
+                        <div class="panel-body">
+                            <div class="recent-documents-list" id="dashboard-recent-docs">
+                                <!-- Dynamic list here -->
+                                <div class="empty-state">
+                                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                                    <p>No documents uploaded yet.</p>
+                                    <button class="btn btn-primary btn-sm" onclick="document.querySelector('[data-view=knowledge]').click()">Upload First File</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bottom: Career Match Matrix -->
+                <div class="dashboard-panel panel-jobs">
+                    <div class="panel-head">
+                        <h3><i class="fa-solid fa-briefcase"></i> Job Openings Matched to You</h3>
+                        <button class="btn btn-secondary btn-sm" onclick="document.querySelector('[data-view=career]').click()">View Current Jobs</button>
+                    </div>
+                    <div class="panel-body">
+                        <div class="dashboard-jobs-grid" id="dashboard-jobs-list">
+                            <!-- Job matches appear here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: KNOWLEDGE VAULT -->
+            <div class="view-section" id="view-knowledge" style="display: none;">
+                <div class="view-title-container">
+                    <h2 class="view-title">Smart Knowledge Vault</h2>
+                    <p class="view-subtitle">Store notes, PDFs, DOCX, and presentations. Our AI extracts and indexes contents for instant semantic searches.</p>
+                </div>
+
+                <div class="knowledge-grid">
+                    <!-- Left: Upload Box -->
+                    <div class="vault-panel panel-upload">
+                        <div class="upload-zone" id="drop-zone">
+                            <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+                            <h3>Drag & Drop Study Files Here</h3>
+                            <p class="upload-formats">Supports PDF, DOCX, PPTX, and TXT files</p>
+                            <span class="upload-or">OR</span>
+                            <label class="btn btn-primary cursor-pointer">
+                                Browse Files
+                                <input type="file" id="file-input" style="display: none;" multiple>
+                            </label>
+                            
+                            <div class="upload-resume-check">
+                                <input type="checkbox" id="is-resume-checkbox">
+                                <label for="is-resume-checkbox">Tag this file as <strong>Resume/CV</strong> (activates Skill Extraction)</label>
+                            </div>
+                        </div>
+                        
+                        <div class="upload-progress-container" id="upload-progress-container" style="display: none;">
+                            <div class="upload-progress-header">
+                                <span class="uploading-filename" id="upload-filename">DSA_Notes.pdf</span>
+                                <span class="uploading-percent" id="upload-percent">0%</span>
+                            </div>
+                            <div class="upload-progress-bar">
+                                <div class="upload-progress-fill" id="upload-progress-fill"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Documents Database -->
+                    <div class="vault-panel panel-documents-list">
+                        <div class="panel-head">
+                            <h3>Uploaded Study Resources (<span id="vault-docs-count">0</span>)</h3>
+                        </div>
+                        <div class="panel-body">
+                            <div class="vault-table-wrapper">
+                                <table class="vault-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Filename</th>
+                                            <th>Type</th>
+                                            <th>Size</th>
+                                            <th>Uploaded</th>
+                                            <th>AI Study Tools</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="vault-documents-tbody">
+                                        <!-- Document rows go here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: AI STUDY CHAT -->
+            <div class="view-section" id="view-chat" style="display: none;">
+                <div class="chat-layout">
+                    <!-- Left: Chat Panel -->
+                    <div class="chat-main-container">
+                        <div class="chat-header-banner">
+                            <div class="chat-bot-avatar">
+                                <i class="fa-solid fa-robot"></i>
+                            </div>
+                            <div class="chat-header-info">
+                                <h3>Life Graph AI RAG Chatbot</h3>
+                                <p id="chat-connected-docs-text">Ask anything about your 0 uploaded documents</p>
+                            </div>
+                            <div class="chat-study-quick-tools">
+                                <select id="chat-tool-doc-select" class="form-select-sm">
+                                    <option value="">Select Document...</option>
+                                    <!-- Dynamic options -->
+                                </select>
+                                <button class="btn btn-glow btn-sm" id="chat-tool-quiz-btn"><i class="fa-solid fa-list-check"></i> Practice Quiz</button>
+                                <button class="btn btn-glow btn-sm" id="chat-tool-sum-btn"><i class="fa-solid fa-align-left"></i> Summarize</button>
+                                <button class="btn btn-glow btn-sm" id="chat-tool-exp-btn"><i class="fa-solid fa-wand-magic-sparkles"></i> Explain</button>
+                            </div>
+                        </div>
+
+                        <div class="chat-messages-area" id="chat-messages-area">
+                            <!-- Messages go here -->
+                            <div class="chat-welcome-state">
+                                <i class="fa-solid fa-brain welcome-logo"></i>
+                                <h2>Your AI Study Assistant</h2>
+                                <p>Ask questions from your class notes, textbooks, and files. I will search through your knowledge vaults and construct answers directly from your documents.</p>
+                                
+                                <div class="chat-suggestions">
+                                    <div class="suggestion-card" data-prompt="Explain deadlock in operating systems.">
+                                        <h4>Explain concept</h4>
+                                        <p>"Explain deadlock in simple words."</p>
+                                    </div>
+                                    <div class="suggestion-card" data-prompt="What are the main topics discussed in my DSA Unit notes?">
+                                        <h4>Explore Notes</h4>
+                                        <p>"What are the main topics inside my DSA notes?"</p>
+                                    </div>
+                                    <div class="suggestion-card" data-prompt="Show me sample practice questions on trees.">
+                                        <h4>Practice Quiz</h4>
+                                        <p>"Give me 5 questions from this chapter."</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="chat-input-wrapper">
+                            <div class="chat-input-bar">
+                                <input type="text" id="chat-input-field" placeholder="Ask a question from your files (e.g. 'What is inheritance in OOP?')...">
+                                <button class="btn btn-primary" id="chat-send-btn">
+                                    <span>Send</span> <i class="fa-solid fa-paper-plane"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Sources/References -->
+                    <div class="chat-sources-sidebar">
+                        <div class="sidebar-header">
+                            <h3><i class="fa-solid fa-quote-left"></i> Verified Sources</h3>
+                            <p>Information matches retrieved from files:</p>
+                        </div>
+                        <div class="sidebar-body" id="chat-sources-list">
+                            <div class="sources-empty-state">
+                                <i class="fa-regular fa-folder-open"></i>
+                                <p>Answers are supported by document extracts shown here.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: CAREER & JOBS -->
+            <div class="view-section" id="view-career" style="display: none;">
+                <div class="view-title-container">
+                    <h2 class="view-title">Student Skill Graph & Career Matching</h2>
+                    <p class="view-subtitle">Select your career goals. We compare your skills profile against job expectations, identify gaps, and query active opportunities.</p>
+                </div>
+
+                <!-- Career Configuration Bar -->
+                <div class="career-header-controls">
+                    <div class="target-role-setting">
+                        <label for="career-target-role-select">Target Career Role:</label>
+                        <select id="career-target-role-select" class="form-select">
+                            <option value="Frontend Developer">Frontend Developer</option>
+                            <option value="Backend Developer">Backend Developer</option>
+                            <option value="Full Stack Developer">Full Stack Developer</option>
+                            <option value="Data Scientist">Data Scientist</option>
+                        </select>
+                    </div>
+                    <div class="profile-stats">
+                        <div class="p-stat">
+                            <span class="p-stat-val" id="skills-acquired-count">0</span>
+                            <span class="p-stat-lbl">Skills Acquired</span>
+                        </div>
+                        <div class="p-stat">
+                            <span class="p-stat-val warning-text" id="skills-gap-count">0</span>
+                            <span class="p-stat-lbl">Skills in Gap</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="career-grid">
+                    <!-- Left: Full Skill Profile & Gap Analysis -->
+                    <div class="career-column career-skills-analytics">
+                        <div class="dashboard-panel">
+                            <div class="panel-head">
+                                <h3><i class="fa-solid fa-circle-nodes"></i> Detailed Skill Levels</h3>
+                            </div>
+                            <div class="panel-body flex-column">
+                                <div class="career-skills-list" id="career-skills-level-list">
+                                    <!-- Full list of skills with levels -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="dashboard-panel" style="margin-top: 24px;">
+                            <div class="panel-head">
+                                <h3><i class="fa-solid fa-chart-gantt"></i> Skill Gap Analysis</h3>
+                            </div>
+                            <div class="panel-body flex-column">
+                                <div class="skill-gap-summary">
+                                    Targeting <strong id="gap-role-title">Frontend Developer</strong>
+                                </div>
+                                <div class="gap-comparison-lists">
+                                    <div class="gap-list acquired">
+                                        <h4><i class="fa-solid fa-circle-check"></i> Skills You Have</h4>
+                                        <ul id="gap-acquired-ul">
+                                            <!-- Green items -->
+                                        </ul>
+                                    </div>
+                                    <div class="gap-list missing">
+                                        <h4><i class="fa-solid fa-triangle-exclamation"></i> Skills To Improve</h4>
+                                        <ul id="gap-missing-ul">
+                                            <!-- Orange warning items -->
+                                        </ul>
+                                    </div>
+                                </div>
+                                
+                                <div class="recommendations-box">
+                                    <h4><i class="fa-solid fa-graduation-cap"></i> Recommended Learning Resources</h4>
+                                    <div class="recommendations-list" id="gap-recommendations-list">
+                                        <!-- Resource Cards -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Live Matched Openings -->
+                    <div class="career-column career-jobs-listings">
+                        <div class="dashboard-panel h-100">
+                            <div class="panel-head">
+                                <h3><i class="fa-solid fa-briefcase"></i> Job Openings Matched to Your Profile</h3>
+                                <button class="btn btn-secondary btn-sm" id="jobs-refresh-btn"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+                            </div>
+                            <div class="panel-body">
+                                <div class="live-jobs-list" id="career-jobs-list-container">
+                                    <!-- Dynamic list of matched jobs -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: SETTINGS -->
+            <div class="view-section" id="view-settings" style="display: none;">
+                <div class="view-title-container">
+                    <h2 class="view-title">Application Settings</h2>
+                    <p class="view-subtitle">Configure your developer API keys and reset database parameters.</p>
+                </div>
+
+                <div class="settings-container">
+                    <div class="settings-card">
+                        <h3><i class="fa-solid fa-key"></i> Gemini API Configuration</h3>
+                        <p class="settings-desc">To extract text embeddings and synthesize study chat responses, Life Graph AI connects to Google's Gemini LLM. Enter your personal API key below. The key is stored locally in your browser and never sent to third-party servers.</p>
+                        
+                        <div class="form-group">
+                            <label for="settings-api-key-input">Gemini API Key:</label>
+                            <div class="input-toggle-wrapper">
+                                <input type="password" id="settings-api-key-input" placeholder="AIzaSy...">
+                                <button class="btn btn-icon" id="toggle-key-visibility-btn"><i class="fa-solid fa-eye"></i></button>
+                            </div>
+                            <small class="form-help">Don't have an API key? You can generate one in the <a href="https://aistudio.google.com/" target="_blank">Google AI Studio</a>.</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="settings-role-select">Default Target Role:</label>
+                            <select id="settings-role-select" class="form-select">
+                                <option value="Frontend Developer">Frontend Developer</option>
+                                <option value="Backend Developer">Backend Developer</option>
+                                <option value="Full Stack Developer">Full Stack Developer</option>
+                                <option value="Data Scientist">Data Scientist</option>
+                            </select>
+                        </div>
+                        
+                        <button class="btn btn-primary" id="save-settings-btn">Save Configuration</button>
+                    </div>
+
+                    <div class="settings-card card-danger">
+                        <h3><i class="fa-solid fa-triangle-exclamation"></i> Database Operations</h3>
+                        <p class="settings-desc">Caution: These options permanently delete local SQLite records. The raw uploaded documents in storage will be scrubbed, and the database state reset.</p>
+                        
+                        <div class="danger-actions-row">
+                            <button class="btn btn-outline-danger" id="clear-skills-btn">Reset Extracted Skills</button>
+                            <button class="btn btn-danger" id="factory-reset-btn">Reset All Documents & Embeddings</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Document Content Reader Slide Modal -->
+    <div class="modal-overlay" id="document-viewer-modal" style="display: none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 id="modal-doc-title">Document Title.pdf</h3>
+                <button class="close-modal-btn" id="close-viewer-modal-btn"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="doc-text-scroller" id="modal-doc-content">
+                    Loading content...
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="modal-download-btn"><i class="fa-solid fa-download"></i> Download Original</button>
+                <button class="btn btn-primary" id="close-viewer-modal-btn2">Close Viewer</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
