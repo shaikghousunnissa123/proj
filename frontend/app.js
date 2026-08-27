@@ -3,7 +3,8 @@
 // Application State
 const state = {
     user: JSON.parse(localStorage.getItem('lifegraph_user')) || null,
-    apiKey: localStorage.getItem('lifegraph_gemini_key') || '',
+    geminiConfigured: false,
+    theme: localStorage.getItem('lifegraph_theme') || 'dark',
     targetRole: 'Frontend Developer',
     documents: [],
     skills: [],
@@ -12,6 +13,9 @@ const state = {
     chatHistory: [],
     queriesCount: parseInt(localStorage.getItem('lifegraph_queries_count') || '0', 10)
 };
+
+// Gemini credentials are developer-managed through Replit Secrets, never browser storage.
+localStorage.removeItem('lifegraph_gemini_key');
 
 // Wrapper for fetch requests to inject authentication headers
 async function apiFetch(url, options = {}) {
@@ -40,10 +44,12 @@ async function apiFetch(url, options = {}) {
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
+    applyTheme(state.theme);
     setupAuth();
     initSettings();
     setupNavigation();
     setupGlobalSearch();
+    setupVaultSmartSearch();
     setupDropZone();
     setupChat();
     setupCareer();
@@ -174,13 +180,29 @@ function showAppWorkspace() {
     document.getElementById('app-container').style.display = 'flex';
     
     // Customize user greeting
-    if (state.user) {
-        document.getElementById('dashboard-welcome-title').textContent = `Welcome, buddy ${state.user.fullname}! 👋`;
-        document.getElementById('sidebar-user-tag').textContent = `Buddy: ${state.user.username}`;
-        document.getElementById('profile-avatar-letter').textContent = state.user.fullname.charAt(0).toUpperCase();
-    }
+    updateUserIdentity();
     
     loadView('dashboard');
+}
+
+function updateUserIdentity() {
+    if (!state.user) return;
+    document.getElementById('dashboard-welcome-title').textContent = `Welcome, buddy ${state.user.fullname}! 👋`;
+    document.getElementById('sidebar-user-tag').textContent = `Buddy: ${state.user.username}`;
+    document.getElementById('profile-avatar-letter').textContent = state.user.fullname.charAt(0).toUpperCase();
+}
+
+function applyTheme(theme) {
+    state.theme = theme === 'light' ? 'light' : 'dark';
+    document.body.dataset.theme = state.theme;
+    document.documentElement.style.colorScheme = state.theme;
+    localStorage.setItem('lifegraph_theme', state.theme);
+
+    document.querySelectorAll('[data-theme-option]').forEach((button) => {
+        const isActive = button.dataset.themeOption === state.theme;
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-pressed', String(isActive));
+    });
 }
 
 function showAuthAlert(type, msg) {
@@ -215,10 +237,7 @@ async function checkServerConnection() {
                     if (el) el.value = state.targetRole;
                 });
             }
-            if (serverSettings.api_key && !state.apiKey) {
-                state.apiKey = serverSettings.api_key;
-                localStorage.setItem('lifegraph_gemini_key', state.apiKey);
-            }
+            state.geminiConfigured = Boolean(serverSettings.gemini_configured);
             updateApiKeyBadge();
         }
     } catch (e) {
@@ -231,16 +250,13 @@ async function checkServerConnection() {
 // Update API key badges in UI
 function updateApiKeyBadge() {
     const badge = document.getElementById('api-key-warning');
-    const keyInput = document.getElementById('settings-api-key-input');
     
-    if (state.apiKey && state.apiKey.trim() !== '') {
+    if (state.geminiConfigured) {
         badge.className = 'api-key-badge success';
-        badge.innerHTML = '<i class="fa-solid fa-circle-check"></i><span>Gemini API Connected</span>';
-        if (keyInput) keyInput.value = state.apiKey;
+        badge.innerHTML = '<i class="fa-solid fa-circle-check"></i><span>Developer Gemini API Connected</span>';
     } else {
         badge.className = 'api-key-badge warning';
-        badge.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i><span>No API Key Entered</span>';
-        if (keyInput) keyInput.value = '';
+        badge.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i><span>Developer Gemini API Not Configured</span>';
     }
 }
 
@@ -586,6 +602,90 @@ async function executeGlobalSearch(query) {
         console.error("Search failed", e);
         list.innerHTML = `<div class="empty-state"><i class="fa-solid fa-triangle-exclamation"></i><p>Search failed: ${e.message}</p></div>`;
     }
+}
+
+function setupVaultSmartSearch() {
+    const form = document.getElementById('vault-smart-search-form');
+    const input = document.getElementById('vault-smart-search-input');
+    const clearButton = document.getElementById('vault-smart-search-clear');
+
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        executeVaultSmartSearch(input.value.trim());
+    });
+
+    clearButton.addEventListener('click', () => {
+        input.value = '';
+        document.getElementById('vault-smart-search-status').textContent = '';
+        document.getElementById('vault-smart-search-results').innerHTML = '';
+    });
+}
+
+async function executeVaultSmartSearch(query) {
+    const status = document.getElementById('vault-smart-search-status');
+    const resultsContainer = document.getElementById('vault-smart-search-results');
+
+    if (!query) {
+        status.textContent = 'Enter a keyword or phrase to search your uploaded documents.';
+        resultsContainer.innerHTML = '';
+        return;
+    }
+
+    status.textContent = 'Searching document contents and filenames...';
+    resultsContainer.innerHTML = '<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i><p>Searching your uploaded documents...</p></div>';
+
+    try {
+        const res = await apiFetch(`/api/search?q=${encodeURIComponent(query)}`);
+        const results = await res.json();
+        if (!res.ok) throw new Error(results.detail || 'Search failed');
+
+        status.textContent = `${results.length} matching document section${results.length === 1 ? '' : 's'} found`;
+        resultsContainer.innerHTML = '';
+
+        if (results.length === 0) {
+            resultsContainer.innerHTML = '<div class="empty-state"><i class="fa-solid fa-file-circle-question"></i><p>No matching keywords were found in your uploaded files.</p></div>';
+            return;
+        }
+
+        results.forEach((result) => {
+            const card = document.createElement('article');
+            card.className = 'smart-search-result-card';
+            const matchLabel = result.match_type === 'keyword' ? 'Keyword match' : 'Content match';
+            const score = Math.round(Number(result.score || 0) * 100);
+            card.innerHTML = `
+                <div class="smart-result-header">
+                    <span class="smart-result-filename"><i class="fa-solid fa-file-lines"></i> ${escapeHtml(result.filename)}</span>
+                    <span class="smart-result-match">${escapeHtml(matchLabel)} · ${score}%</span>
+                </div>
+                <div class="smart-result-location">${escapeHtml(result.location || 'Document content')}</div>
+                <p class="smart-result-snippet">${highlightSearchKeywords(result.text || '', query)}</p>
+                <button class="smart-result-view" type="button"><i class="fa-solid fa-eye"></i> View document</button>
+            `;
+            card.querySelector('.smart-result-view').addEventListener('click', () => viewDocContent(result.document_id));
+            resultsContainer.appendChild(card);
+        });
+    } catch (e) {
+        status.textContent = '';
+        resultsContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-triangle-exclamation"></i><p>Search failed: ${escapeHtml(e.message)}</p></div>`;
+    }
+}
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    }[character]));
+}
+
+function highlightSearchKeywords(text, query) {
+    const terms = [...new Set((query.match(/[a-zA-Z0-9_]+/g) || []).map(term => term.toLowerCase()))];
+    const safeText = escapeHtml(text);
+    if (!terms.length) return safeText;
+    const pattern = new RegExp(`(${terms.map(term => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
+    return safeText.replace(pattern, '<mark class="smart-search-highlight">$1</mark>');
 }
 
 // --- 3. KNOWLEDGE VAULT CONTROLLER (Upload / DB files list) ---
@@ -1202,34 +1302,77 @@ function renderDetailedJobsList(container) {
 // --- 7. SETTINGS CONTROLLER ---
 function loadSettingsView() {
     updateApiKeyBadge();
+    loadProfile();
 }
 
 function setupSettingsPage() {
     const saveBtn = document.getElementById('save-settings-btn');
-    const keyInput = document.getElementById('settings-api-key-input');
-    const toggleBtn = document.getElementById('toggle-key-visibility-btn');
     const roleSelect = document.getElementById('settings-role-select');
-    
-    toggleBtn.addEventListener('click', () => {
-        const type = keyInput.type === 'password' ? 'text' : 'password';
-        keyInput.type = type;
-        toggleBtn.innerHTML = type === 'password' ? '<i class="fa-solid fa-eye"></i>' : '<i class="fa-solid fa-eye-slash"></i>';
+    const saveProfileBtn = document.getElementById('save-profile-btn');
+    const profileStatus = document.getElementById('profile-status');
+    const sendAdminMessageBtn = document.getElementById('send-admin-message-btn');
+    const adminMessageStatus = document.getElementById('admin-message-status');
+
+    document.querySelectorAll('[data-theme-option]').forEach((button) => {
+        button.addEventListener('click', () => applyTheme(button.dataset.themeOption));
+    });
+
+    saveProfileBtn.addEventListener('click', async () => {
+        const fullname = document.getElementById('profile-fullname-input').value.trim();
+        const username = document.getElementById('profile-username-input').value.trim();
+        setInlineStatus(profileStatus, 'Saving...');
+
+        try {
+            const res = await apiFetch('/api/profile', {
+                method: 'PUT',
+                body: JSON.stringify({ fullname, username })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Could not update profile');
+
+            state.user = { ...state.user, ...data };
+            localStorage.setItem('lifegraph_user', JSON.stringify(state.user));
+            updateUserIdentity();
+            setInlineStatus(profileStatus, 'Profile updated.', 'success');
+        } catch (e) {
+            setInlineStatus(profileStatus, e.message, 'error');
+        }
+    });
+
+    sendAdminMessageBtn.addEventListener('click', async () => {
+        const subjectInput = document.getElementById('admin-subject-input');
+        const messageInput = document.getElementById('admin-message-input');
+        const subject = subjectInput.value.trim();
+        const message = messageInput.value.trim();
+        setInlineStatus(adminMessageStatus, 'Sending...');
+
+        try {
+            const res = await apiFetch('/api/contact-admin', {
+                method: 'POST',
+                body: JSON.stringify({ subject, message })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Could not send your message');
+
+            subjectInput.value = '';
+            messageInput.value = '';
+            setInlineStatus(adminMessageStatus, 'Message sent to admin review.', 'success');
+        } catch (e) {
+            setInlineStatus(adminMessageStatus, e.message, 'error');
+        }
     });
     
     saveBtn.addEventListener('click', async () => {
-        const key = keyInput.value.trim();
         const role = roleSelect.value;
         
-        state.apiKey = key;
         state.targetRole = role;
-        localStorage.setItem('lifegraph_gemini_key', key);
+        localStorage.removeItem('lifegraph_gemini_key');
         document.getElementById('current-role-badge').textContent = `Target: ${state.targetRole}`;
         
         try {
             const res = await apiFetch('/api/settings', {
                 method: 'POST',
                 body: JSON.stringify({
-                    api_key: key,
                     target_role: role
                 })
             });
@@ -1243,38 +1386,26 @@ function setupSettingsPage() {
             alert("Settings saved locally but server failed to update: " + e.message);
         }
     });
-    
-    document.getElementById('clear-skills-btn').addEventListener('click', async () => {
-        if (!state.user) return;
-        if (!confirm("Reset your extracted student skills? This will restore dummy skills until a resume is re-uploaded.")) return;
-        try {
-            const res = await apiFetch('/api/skills/clear', { method: 'POST' });
-            if (res.ok) {
-                alert("Skills profile cleared.");
-                loadDashboard();
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    });
-    
-    document.getElementById('factory-reset-btn').addEventListener('click', async () => {
-        if (!state.user) return;
-        if (!confirm("WARNING: This will delete ALL your uploaded study documents, clear your vector index files, reset skills database tables, and restart your Life Graph environment. Proceed?")) return;
-        
-        try {
-            const res = await apiFetch('/api/documents');
-            const docs = await res.json();
-            for (const d of docs) {
-                await apiFetch(`/api/documents/${d.id}`, { method: 'DELETE' });
-            }
-            await apiFetch('/api/skills/clear', { method: 'POST' });
-            
-            alert("Database environment reset complete.");
-            loadView('dashboard');
-        } catch (e) {
-            console.error("Database reset error", e);
-            alert("Factory reset failed: " + e.message);
-        }
-    });
+}
+
+async function loadProfile() {
+    if (!state.user) return;
+    try {
+        const res = await apiFetch('/api/profile');
+        const profile = await res.json();
+        if (!res.ok) throw new Error(profile.detail || 'Could not load profile');
+
+        state.user = { ...state.user, ...profile };
+        localStorage.setItem('lifegraph_user', JSON.stringify(state.user));
+        document.getElementById('profile-fullname-input').value = profile.fullname || '';
+        document.getElementById('profile-username-input').value = profile.username || '';
+        updateUserIdentity();
+    } catch (e) {
+        console.error('Profile loading failed', e);
+    }
+}
+
+function setInlineStatus(element, message, type = '') {
+    element.textContent = message;
+    element.className = `settings-inline-status ${type}`.trim();
 }
