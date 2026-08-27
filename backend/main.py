@@ -49,9 +49,16 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
+class ProfileUpdate(BaseModel):
+    username: str
+    fullname: str
+
 class SettingsUpdate(BaseModel):
-    api_key: Optional[str] = None
     target_role: Optional[str] = None
+
+class ContactAdminRequest(BaseModel):
+    subject: str
+    message: str
 
 class ChatQuery(BaseModel):
     query: str
@@ -70,10 +77,7 @@ async def get_current_user_id(x_user_id: Optional[str] = Header(None)) -> int:
         raise HTTPException(status_code=401, detail="Invalid session token")
 
 def get_user_api_key(user_id: int) -> Optional[str]:
-    """Tries to get the Gemini API Key from settings DB for user, then falls back to environment variable."""
-    key = db.get_setting(user_id, "api_key")
-    if key and key.strip():
-        return key.strip()
+    """Returns the developer-managed Gemini API key from Replit Secrets."""
     return os.environ.get("GEMINI_API_KEY")
 
 # --- Authentication Routes ---
@@ -107,8 +111,6 @@ def login_student(data: LoginRequest):
 
 @app.post("/api/settings")
 def update_settings(data: SettingsUpdate, user_id: int = Depends(get_current_user_id)):
-    if data.api_key is not None:
-        db.save_setting(user_id, "api_key", data.api_key)
     if data.target_role is not None:
         db.save_setting(user_id, "target_role", data.target_role)
     return {"status": "success", "message": "Settings updated"}
@@ -116,8 +118,43 @@ def update_settings(data: SettingsUpdate, user_id: int = Depends(get_current_use
 @app.get("/api/settings")
 def get_settings(user_id: int = Depends(get_current_user_id)):
     return {
-        "api_key": db.get_setting(user_id, "api_key") or "",
+        "gemini_configured": bool(os.environ.get("GEMINI_API_KEY")),
         "target_role": db.get_setting(user_id, "target_role") or "Frontend Developer"
+    }
+
+@app.get("/api/profile")
+def get_profile(user_id: int = Depends(get_current_user_id)):
+    profile = db.get_user_profile(user_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="User profile not found")
+    return profile
+
+@app.put("/api/profile")
+def update_profile(data: ProfileUpdate, user_id: int = Depends(get_current_user_id)):
+    username = data.username.strip()
+    fullname = data.fullname.strip()
+    if len(username) < 3:
+        raise HTTPException(status_code=400, detail="Username must be at least 3 characters")
+    if len(fullname) < 2:
+        raise HTTPException(status_code=400, detail="Full name must be at least 2 characters")
+    try:
+        return db.update_user_profile(user_id, username, fullname)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+@app.post("/api/contact-admin")
+def contact_admin(data: ContactAdminRequest, user_id: int = Depends(get_current_user_id)):
+    subject = data.subject.strip()
+    message = data.message.strip()
+    if len(subject) < 3:
+        raise HTTPException(status_code=400, detail="Please enter a subject")
+    if len(message) < 10:
+        raise HTTPException(status_code=400, detail="Please enter at least 10 characters")
+    message_id = db.save_admin_message(user_id, subject, message)
+    return {
+        "status": "success",
+        "message_id": message_id,
+        "message": "Your message was sent to the admin review inbox."
     }
 
 @app.post("/api/upload")
