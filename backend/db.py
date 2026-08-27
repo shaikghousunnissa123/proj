@@ -3,6 +3,7 @@ import os
 import json
 import hashlib
 import secrets
+import re
 import numpy as np
 
 DB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
@@ -85,6 +86,18 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
     """)
+
+    # 6. Messages sent to the administrator
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS admin_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        subject TEXT NOT NULL,
+        message TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+    """)
     
     conn.commit()
     conn.close()
@@ -133,6 +146,43 @@ def verify_user(username: str, password: str) -> dict:
             "fullname": row["fullname"]
         }
     return None
+
+def get_user_profile(user_id: int) -> dict:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, username, fullname FROM users WHERE id = ?", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def update_user_profile(user_id: int, username: str, fullname: str) -> dict:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE users SET username = ?, fullname = ? WHERE id = ?",
+            (username.lower().strip(), fullname.strip(), user_id)
+        )
+        if cursor.rowcount == 0:
+            raise ValueError("User profile not found")
+        conn.commit()
+    except sqlite3.IntegrityError:
+        raise ValueError("That username is already in use")
+    finally:
+        conn.close()
+    return get_user_profile(user_id)
+
+def save_admin_message(user_id: int, subject: str, message: str) -> int:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO admin_messages (user_id, subject, message) VALUES (?, ?, ?)",
+        (user_id, subject.strip(), message.strip())
+    )
+    message_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return message_id
 
 # --- Partitioned Document Operations ---
 
@@ -259,21 +309,39 @@ def vector_search(user_id: int, query_embedding: list[float], top_k: int = 5) ->
     return scored_chunks[:top_k]
 
 def keyword_search(user_id: int, keyword: str) -> list[dict]:
-    """Performs keyword search restricted to the user's documents."""
+    """Searches filenames and extracted document text for any supplied keyword."""
+    terms = list(dict.fromkeys(re.findall(r"[a-zA-Z0-9_]+", keyword.lower())))
+    if not terms:
+        return []
+
     conn = get_db_connection()
     cursor = conn.cursor()
-    like_pattern = f"%{keyword}%"
-    cursor.execute("""
-        SELECT c.id as chunk_id, c.document_id, c.location, c.text, d.filename 
-        FROM chunks c 
+    conditions = []
+    params = [user_id]
+    for term in terms:
+        conditions.append("(LOWER(c.text) LIKE ? OR LOWER(d.filename) LIKE ?)")
+        like_pattern = f"%{term}%"
+        params.extend([like_pattern, like_pattern])
+
+    cursor.execute(f"""
+        SELECT c.id as chunk_id, c.document_id, c.location, c.text, d.filename
+        FROM chunks c
         JOIN documents d ON c.document_id = d.id
-        WHERE d.user_id = ? AND (c.text LIKE ? OR d.filename LIKE ?)
-        LIMIT 10
-    """, (user_id, like_pattern, like_pattern))
+        WHERE d.user_id = ? AND ({' OR '.join(conditions)})
+        LIMIT 20
+    """, params)
     rows = cursor.fetchall()
     conn.close()
-    
-    return [dict(row) for row in rows]
+
+    results = []
+    for row in rows:
+        result = dict(row)
+        searchable_text = f"{result['filename']} {result['text']}".lower()
+        result["keyword_matches"] = sum(1 for term in terms if term in searchable_text)
+        results.append(result)
+
+    results.sort(key=lambda result: result["keyword_matches"], reverse=True)
+    return results
 
 # --- Partitioned Skill Profile Operations ---
 
